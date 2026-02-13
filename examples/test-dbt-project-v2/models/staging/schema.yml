@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: stg_users
+    description: "Staging view of users table"
+    columns:
+      - name: id
+        description: "The primary key for this table (modified description)"
+        tests:
+          - unique
+          - not_null
+      # email column removed
+      - name: created_at
+        description: "Timestamp of creation"
+      - name: phone
+        description: "User phone number (new column)"
