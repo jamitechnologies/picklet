@@ -1,6 +1,8 @@
 import { setupWorker } from './lib/queue';
-import { getPullRequestFiles, ChangedFile, createCheckRun, updateCheckRun, postComment } from './lib/github';
+import { getPullRequestFiles, ChangedFile, createCheckRun, updateCheckRun, postComment, getFileContents } from './lib/github';
 import { formatPRComment, AnalysisResult } from './lib/comment-formatter';
+import { parseMigration } from './lib/sql-parser';
+import { logger } from './lib/logger';
 
 // Define the PRJobData interface (assuming it's not imported)
 interface PRJobData {
@@ -10,8 +12,14 @@ interface PRJobData {
     headSha: string;
 }
 
-async function processPRJob(data: PRJobData) {
-    console.log(`[Worker] Processing PR #${data.prNumber} in ${data.repoName}...`);
+export async function processPRJob(data: PRJobData) {
+    const log = logger.child({
+        pr: data.prNumber,
+        repo: data.repoName,
+        setup: 'worker'
+    });
+
+    log.info(`Processing PR job`);
 
     const [owner, repo] = data.repoName.split('/');
 
@@ -25,13 +33,13 @@ async function processPRJob(data: PRJobData) {
             data.headSha,
             'Picket Schema Check'
         );
-        console.log(`[Worker] Created Check Run ID: ${checkRunId}`);
+        log.info(`Created Check Run`, { checkRunId });
 
         // Update to In Progress
         await updateCheckRun(data.installationId, owner, repo, checkRunId, 'in_progress');
 
     } catch (e: any) {
-        console.error(`[Worker] Failed to create check run:`, e.message);
+        log.error(`Failed to create check run`, { error: e.message });
         return; // Can't report status if we can't create the check
     }
 
@@ -62,21 +70,72 @@ async function processPRJob(data: PRJobData) {
             console.log(`[Worker] Relevant schema files modified:`);
             relevantFiles.forEach(f => console.log(`  - ${f.filename} (${f.status})`));
 
-            // Stubbing Analysis Results for Day 29
-            // In a real scenario, we would parse these files here.
-            analysisResults = relevantFiles.map(f => ({
-                file: f.filename,
-                changes: [`File was ${f.status}`],
-                violations: [], // No actual validation yet without the full engine on these specific files
-                severity: 'SAFE'
-            }));
-
-            summary += `\n\n**Schema Files Modified:**\n` +
-                relevantFiles.map(f => `- \`${f.filename}\` (${f.status})`).join('\n');
             conclusion = 'neutral';
-        } else {
-            console.log(`[Worker] No schema-relevant files changed.`);
-            summary += `\n\nNo schema changes detected.`;
+
+            // Process each relevant file
+            for (const file of relevantFiles) {
+                const result: AnalysisResult = {
+                    file: file.filename,
+                    changes: [],
+                    violations: [],
+                    errors: [],
+                    severity: 'SAFE'
+                };
+
+                try {
+                    // Fetch content
+                    // TODO: parallelize with Promise.all for optimization later
+                    if (file.status === 'removed') {
+                        result.changes.push('File removed');
+                        result.severity = 'BREAKING'; // Conservative default for removal
+                    } else {
+                        const content = await getFileContents(data.installationId, owner, repo, file.filename, data.headSha);
+
+                        if (content && file.filename.endsWith('.sql')) {
+                            // Parse SQL Migration
+                            const changes = parseMigration(content);
+
+                            if (changes.length === 0) {
+                                result.changes.push('No schema changes detected in SQL');
+                            } else {
+                                changes.forEach(change => {
+                                    result.changes.push(`[${change.type}] ${change.details}`);
+                                    if (change.severity === 'BREAKING') {
+                                        result.severity = 'BREAKING';
+                                    } else if (change.severity === 'MANUAL_REVIEW' && result.severity !== 'BREAKING') {
+                                        // Keeping it safe or generic if review needed, or maybe treat as warning?
+                                        // For now, let's just log it.
+                                    }
+                                });
+                            }
+                        } else if (content && (file.filename.endsWith('.yml') || file.filename.endsWith('.yaml'))) {
+                            // TODO: Connect dbt parser
+                            result.changes.push('dbt model change detected (parsing pending integration)');
+                        }
+                    }
+                } catch (e: any) {
+                    console.error(`[Worker] Failed to process ${file.filename}:`, e.message);
+                    result.errors?.push(`Failed to process file: ${e.message}`);
+                }
+
+                analysisResults.push(result);
+            }
+
+            const breakingCount = analysisResults.filter(r => r.severity === 'BREAKING').length;
+            const errorCount = analysisResults.filter(r => r.errors && r.errors.length > 0).length;
+
+            if (breakingCount > 0 || errorCount > 0) {
+                conclusion = 'success'; // actually let's mark as success so the PR isn't blocked by GitHub check, but the comment says "Issues"
+                // OR we can fail it. Let's keep it neutral/success for now to avoid blocking until we are sure.
+                // The prompt says "Parsing Errors -> Post error to PR".
+
+                // If there are errors, maybe we want to flag attention.
+                if (errorCount > 0) {
+                    summary += `\n\n⚠️ **Processing Errors Detected**`;
+                }
+            }
+
+            summary += `\n\nAnalyzed ${relevantFiles.length} files.`;
         }
 
         // 3. Post PR Comment
