@@ -1,0 +1,1 @@
+select * from "picket_db"."public"."stg_users"

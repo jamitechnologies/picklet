@@ -1,0 +1,13 @@
+
+default:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      user: picket_user
+      password: picket_password
+      dbname: picket_db
+      port: 5433
+      schema: public
+      threads: 1

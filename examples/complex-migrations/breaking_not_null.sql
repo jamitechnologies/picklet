@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN required_field VARCHAR(50) NOT NULL;
