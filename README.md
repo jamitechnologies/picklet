@@ -82,4 +82,4 @@ You can verify the core features by running the included test scripts:
 ---
 
 ##  license
-[MIT](LICENSE)
+[License](LICENSE)
