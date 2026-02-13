@@ -2,17 +2,22 @@ export interface AnalysisResult {
     file: string;
     changes: string[]; // e.g. "Field removed: email"
     violations: string[]; // e.g. "Required field 'email' missing"
+    errors?: string[]; // e.g. "Failed to parse SQL"
     severity: 'SAFE' | 'BREAKING';
 }
 
 export function formatPRComment(results: AnalysisResult[]): string {
     const breakingCount = results.filter(r => r.severity === 'BREAKING').length;
-    const safeCount = results.length - breakingCount;
+    const errorCount = results.filter(r => r.errors && r.errors.length > 0).length;
+    const safeCount = results.length - breakingCount - errorCount;
 
     let icon = '✅';
     let status = 'No issues found';
 
-    if (breakingCount > 0) {
+    if (errorCount > 0) {
+        icon = '🚨';
+        status = `${errorCount} Processing Errors`;
+    } else if (breakingCount > 0) {
         icon = '❌';
         status = `${breakingCount} Breaking Changes`;
     } else if (safeCount > 0) {
@@ -42,11 +47,17 @@ export function formatPRComment(results: AnalysisResult[]): string {
                 comment += `\n`;
             }
 
+            if (result.errors && result.errors.length > 0) {
+                comment += `#### 🚨 Processing Errors\n`;
+                result.errors.forEach(e => comment += `- ${e}\n`);
+                comment += `\n> [!TIP]\n> Check for syntax errors in your SQL/YAML or ensure the file is accessible.\n\n`;
+            }
+
             comment += `</details>\n\n`;
         }
     }
 
-    comment += `---\n💡 Need help? [View docs](https://docs.picket.dev)`;
+    comment += `---\n💡 **Need help?** [Troubleshooting Guide](https://docs.picket.dev/troubleshooting) • [Schema Rules](https://docs.picket.dev/rules)`;
 
     return comment;
 }

@@ -30,7 +30,7 @@ async function main() {
         const prs = await octokit.rest.pulls.list({
             owner,
             repo,
-            state: 'open',
+            state: 'all',
             per_page: 1
         });
 
