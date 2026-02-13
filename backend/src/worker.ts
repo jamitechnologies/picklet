@@ -2,6 +2,7 @@ import { setupWorker } from './lib/queue';
 import { getPullRequestFiles, ChangedFile, createCheckRun, updateCheckRun, postComment, getFileContents } from './lib/github';
 import { formatPRComment, AnalysisResult } from './lib/comment-formatter';
 import { parseMigration } from './lib/sql-parser';
+import { parseDbtSchema } from './lib/parser';
 import { logger } from './lib/logger';
 
 // Define the PRJobData interface (assuming it's not imported)
@@ -109,8 +110,20 @@ export async function processPRJob(data: PRJobData) {
                                 });
                             }
                         } else if (content && (file.filename.endsWith('.yml') || file.filename.endsWith('.yaml'))) {
-                            // TODO: Connect dbt parser
-                            result.changes.push('dbt model change detected (parsing pending integration)');
+                            try {
+                                const models = parseDbtSchema(content);
+                                if (models.length > 0) {
+                                    models.forEach(m => {
+                                        result.changes.push(`[DBT_MODEL] Modified model: ${m.name}`);
+                                        // TODO: Compare with previous version (requires fetching base file)
+                                        // For now, just report that valid dbt schema was parsed
+                                    });
+                                } else {
+                                    result.changes.push('YAML file modified (no dbt models found)');
+                                }
+                            } catch (e: any) {
+                                result.errors?.push(`Invalid dbt schema: ${e.message}`);
+                            }
                         }
                     }
                 } catch (e: any) {

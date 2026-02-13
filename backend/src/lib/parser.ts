@@ -20,27 +20,41 @@ export interface DbtSchema {
     models: DbtModel[];
 }
 
-export async function parseDbtProject(projectPath: string): Promise<DbtModel[]> {
+export function parseDbtSchema(content: string): DbtModel[] {
     const models: DbtModel[] = [];
+    try {
+        const parsed = yaml.load(content) as any;
+
+        if (parsed && parsed.models && Array.isArray(parsed.models)) {
+            for (const modelDef of parsed.models) {
+                models.push({
+                    name: modelDef.name,
+                    description: modelDef.description,
+                    columns: (modelDef.columns || []).map((col: any) => ({
+                        name: col.name,
+                        description: col.description,
+                        data_type: col.data_type,
+                        tests: col.tests
+                    }))
+                });
+            }
+        }
+    } catch (e) {
+        throw new Error(`Invalid YAML: ${e}`);
+    }
+    return models;
+}
+
+export async function parseDbtProject(projectPath: string): Promise<DbtModel[]> {
+    let models: DbtModel[] = [];
     const files = await getFiles(projectPath);
 
     for (const file of files) {
         if (file.endsWith('.yml') || file.endsWith('.yaml')) {
-            // Check if it's a schema file (heuristic: has 'models' key)
             try {
                 const content = fs.readFileSync(file, 'utf8');
-                const parsed = yaml.load(content) as any;
-
-                if (parsed && parsed.models && Array.isArray(parsed.models)) {
-                    // It's a dbt schema file
-                    for (const modelDef of parsed.models) {
-                        models.push({
-                            name: modelDef.name,
-                            description: modelDef.description,
-                            columns: modelDef.columns || []
-                        });
-                    }
-                }
+                const fileModels = parseDbtSchema(content);
+                models = models.concat(fileModels);
             } catch (e) {
                 console.warn(`Failed to parse ${file}:`, e);
             }

@@ -10,11 +10,13 @@ import { processPRJob } from './worker';
 import * as github from './lib/github';
 import * as formatter from './lib/comment-formatter';
 import * as sqlParser from './lib/sql-parser';
+import { parseDbtSchema } from './lib/parser';
 
 // Mock dependencies
 jest.mock('./lib/github');
 jest.mock('./lib/comment-formatter');
 jest.mock('./lib/sql-parser');
+jest.mock('./lib/parser');
 
 describe('Worker Integration', () => {
     const mockData = {
@@ -124,6 +126,28 @@ describe('Worker Integration', () => {
             expect.objectContaining({
                 file: 'bad.sql',
                 errors: expect.arrayContaining(['Failed to process file: Syntax Error'])
+            })
+        ]));
+    });
+
+    it('should report dbt model changes', async () => {
+        // Setup Mocks
+        (github.createCheckRun as jest.Mock).mockResolvedValue(1004);
+        (github.getPullRequestFiles as jest.Mock).mockResolvedValue([
+            { filename: 'models/stg_cust.yml', status: 'modified' }
+        ]);
+        (github.getFileContents as jest.Mock).mockResolvedValue('models:\n  - name: stg_cust\n');
+        (parseDbtSchema as jest.Mock).mockReturnValue([
+            { name: 'stg_cust', description: 'desc', columns: [] }
+        ]);
+
+        await processPRJob(mockData);
+
+        expect(parseDbtSchema).toHaveBeenCalledWith('models:\n  - name: stg_cust\n');
+        expect(formatter.formatPRComment).toHaveBeenCalledWith(expect.arrayContaining([
+            expect.objectContaining({
+                file: 'models/stg_cust.yml',
+                changes: expect.arrayContaining(['[DBT_MODEL] Modified model: stg_cust'])
             })
         ]));
     });
