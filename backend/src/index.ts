@@ -7,9 +7,35 @@ import { prQueue } from './lib/queue';
 // Change default-import to a namespace import to fix the module declaration syntax
 import express, { Request, Response } from 'express';
 
+import * as Sentry from '@sentry/node';
+import helmet from 'helmet';
+
 dotenv.config();
 
 const app = express();
+
+// Security headers
+app.use(helmet());
+
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        integrations: [
+            // enable HTTP calls tracing
+            new Sentry.Integrations.Http({ tracing: true }),
+            // enable Express.js middleware tracing
+            new Sentry.Integrations.Express({ app }),
+        ],
+        tracesSampleRate: 1.0,
+    });
+
+    // RequestHandler creates a separate execution context using domains, so that every
+    // transaction/span/breadcrumb is attached to its own Hub instance
+    app.use(Sentry.Handlers.requestHandler());
+    // TracingHandler creates a trace for every incoming request
+    app.use(Sentry.Handlers.tracingHandler());
+}
+
 const port = process.env.PORT || 3000;
 
 // Middleware to capture raw body for signature verification
@@ -74,6 +100,11 @@ app.post('/webhooks/github', async (req: Request, res: Response) => {
 
     res.status(200).send('Event received');
 });
+
+// The error handler must be before any other error middleware and after all controllers
+if (process.env.SENTRY_DSN) {
+    app.use(Sentry.Handlers.errorHandler());
+}
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);

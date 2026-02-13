@@ -4,6 +4,17 @@ import { formatPRComment, AnalysisResult } from './lib/comment-formatter';
 import { parseMigration } from './lib/sql-parser';
 import { parseDbtSchema } from './lib/parser';
 import { logger } from './lib/logger';
+import * as Sentry from '@sentry/node';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        tracesSampleRate: 1.0,
+    });
+}
 
 // Define the PRJobData interface (assuming it's not imported)
 interface PRJobData {
@@ -174,7 +185,11 @@ export async function processPRJob(data: PRJobData) {
         );
 
     } catch (error: any) {
-        console.error(`[Worker] Error checking PR files:`, error.message);
+        log.error(`Error checking PR files`, { error: error.message });
+
+        if (process.env.SENTRY_DSN) {
+            Sentry.captureException(error);
+        }
 
         // Report Failure
         await updateCheckRun(

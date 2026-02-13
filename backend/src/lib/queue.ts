@@ -4,9 +4,29 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-const connection = new IORedis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
+// Connection logic
+const redisUrl = process.env.REDIS_URL;
+let connectionConfig: any;
+
+if (redisUrl) {
+    connectionConfig = redisUrl;
+    // Handle TLS for production Redis (e.g. Heroku, Render, AWS)
+    if (redisUrl.startsWith('rediss://')) {
+        connectionConfig = {
+            href: redisUrl,
+            tls: {
+                rejectUnauthorized: false
+            }
+        };
+    }
+} else {
+    connectionConfig = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+    };
+}
+
+const connection = new IORedis(connectionConfig, {
     maxRetriesPerRequest: null
 });
 

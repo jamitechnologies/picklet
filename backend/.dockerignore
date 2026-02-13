@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+dist
+coverage
+.env
+.git
+.gitignore
+README.md
+docs
+examples
+scripts
+tests
+src/**/*.test.ts
+src/scripts/create-test-pr.ts
+src/scripts/simulate-pr-webhook.ts
