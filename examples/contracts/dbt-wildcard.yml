@@ -1,0 +1,8 @@
+version: "1.0"
+contract:
+  name: "Wildcard Staging Models"
+  owner: "data-eng-team"
+  resource:
+    type: "dbt_model"
+    name: "stg_*"
+  enforcement_level: "warn"

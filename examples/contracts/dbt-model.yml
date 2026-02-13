@@ -1,0 +1,18 @@
+version: "1.0"
+contract:
+  name: "User Staging Model"
+  owner: "data-eng-team"
+  description: "Governance contract for the staging users model"
+  resource:
+    type: "dbt_model"
+    name: "stg_users"
+    location: "analytics.staging"
+  enforcement_level: "strict"
+  consumers:
+    - name: "marketing-dashboard"
+      owner: "marketing-team"
+      criticality: "high"
+      point_of_contact: "marketing-data@example.com"
+  schema_config:
+    require_descriptions: true
+    forbid_breaking_changes: true

@@ -1,0 +1,12 @@
+version: "1.0"
+contract:
+  name: "Raw Events Table"
+  owner: "backend-team"
+  resource:
+    type: "postgres_table"
+    name: "public.raw_events"
+  enforcement_level: "warn"
+  consumers:
+    - name: "data-warehouse-loader"
+      owner: "data-eng-team"
+      criticality: "medium"

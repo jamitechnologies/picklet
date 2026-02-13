@@ -1,0 +1,8 @@
+version: "1.0"
+contract:
+  name: "Invalid Contract"
+  # Missing owner
+  resource:
+    type: "unknown_type" # Invalid enum
+    name: "some_resource"
+  enforcement_level: "strict"

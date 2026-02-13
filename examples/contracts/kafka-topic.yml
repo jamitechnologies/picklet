@@ -1,0 +1,9 @@
+version: "1.0"
+contract:
+  name: "User Signups Topic"
+  owner: "growth-team"
+  resource:
+    type: "kafka_topic"
+    name: "user_signups"
+    location: "prod-cluster"
+  enforcement_level: "none"
